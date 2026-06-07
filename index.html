@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+  <meta name="theme-color" content="#8B4513"/>
+  <title>赣州风物志 · 滑块拼图</title>
+  <meta name="description" content="一款以江西赣州人文地理为主题的滑块拼图小游戏，15关带你品味赣南千年文化"/>
+  <!-- Open Graph / 微信分享 -->
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="赣州风物志 · 滑块拼图"/>
+  <meta property="og:description" content="一款以赣州人文地理为主题的滑块拼图小游戏，带你品味赣南千年文化"/>
+  <meta property="og:image" content="https://via.placeholder.com/400x300/8B4513/F5F0E8?text=赣州风物志"/>
+  <meta name="twitter:card" content="summary_large_image"/>
+  <!-- Apple PWA -->
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="赣州风物志"/>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet"/>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React 18 + ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel (JSX 编译) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{margin:0;padding:0;background:#F5F0E8;min-height:100%;overflow-x:hidden}
+    body{padding-bottom:env(safe-area-inset-bottom)}
+    @keyframes slideUp{from{transform:translateY(60px);opacity:0}to{transform:translateY(0);opacity:1}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes starPop{0%{transform:scale(0);opacity:0}70%{transform:scale(1.3);opacity:1}100%{transform:scale(1);opacity:1}}
+    @keyframes shimmer{0%{opacity:.6}50%{opacity:1}100%{opacity:.6}}
+    @keyframes wave{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+    .star-anim{animation:starPop .4s ease forwards}
+    .fade-in{animation:fadeIn .3s ease}
+    .slide-up{animation:slideUp .35s ease-out}
+    /* 水波动画 */
+    .wave-wrap{overflow:hidden;position:absolute;bottom:0;width:100%;height:40px}
+    .wave-svg{width:200%;animation:wave 6s linear infinite}
+    ::-webkit-scrollbar{width:4px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#C4973B55;border-radius:2px}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const {useState, useCallback, useEffect, useRef, memo} = React;
+
+// ═══════════════════════════════════════════════════════
+// 色板
+// ═══════════════════════════════════════════════════════
+const C = {
+  wall:"#8B4513", tile:"#6B7B8D", forest:"#2D5F2D",
+  orange:"#FF8C00", river:"#2F4F6F", bg:"#F5F0E8",
+  ink:"#2C2417", gold:"#C4973B", cream:"#FDF8EF",
+  red:"#B83A2A", pink:"#F2D5C4", sky:"#E8D5B0",
+  water:"#4A7C9B", darkGreen:"#1A3A1A", lightGreen:"#5A9A4A",
+};
+
+// ═══════════════════════════════════════════════════════
+// SVG 场景
+// ═══════════════════════════════════════════════════════
+const CityWallScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="cw-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#E8D5B0"/>
+        <stop offset="60%" stopColor="#F5F0E8"/>
+        <stop offset="100%" stopColor="#d4e4d4"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#cw-sky)"/>
+    <ellipse cx="80" cy="215" rx="110" ry="38" fill={C.forest} opacity=".22"/>
+    <ellipse cx="310" cy="200" rx="100" ry="45" fill={C.forest} opacity=".18"/>
+    <ellipse cx="200" cy="188" rx="160" ry="52" fill={C.forest} opacity=".14"/>
+    <rect x="0" y="248" width="400" height="152" fill={C.wall} rx="0"/>
+    {[...Array(19)].map((_,i)=><line key={`h${i}`} x1="0" y1={248+i*8} x2="400" y2={248+i*8} stroke="#7A3B10" strokeWidth=".6" opacity=".25"/>)}
+    {[...Array(22)].map((_,i)=><line key={`v${i}`} x1={i*18} y1="248" x2={i*18} y2="400" stroke="#7A3B10" strokeWidth=".4" opacity=".2"/>)}
+    <rect x="150" y="168" width="100" height="82" fill={C.ink} opacity=".82" rx="2"/>
+    <path d="M143 170 Q200 140 257 170" fill={C.ink} opacity=".82"/>
+    <rect x="167" y="188" width="66" height="62" fill={C.wall} opacity=".35" rx="33 33 0 0"/>
+    <rect x="118" y="228" width="164" height="22" fill={C.tile} rx="1"/>
+    <path d="M108 230 L200 206 L292 230" fill={C.tile}/>
+    <path d="M104 230 L200 202 L296 230" fill="none" stroke={C.gold} strokeWidth="1.8"/>
+    {[150,175,220,248].map((x,i)=><rect key={`f${i}`} x={x} y="230" width="9" height="19" fill={C.red} opacity=".65" rx="1"/>)}
+    <path d="M0 368 Q25 342 55 362 Q75 345 100 368" fill={C.forest} opacity=".55"/>
+    <path d="M298 372 Q328 342 355 365 Q375 348 400 372" fill={C.forest} opacity=".55"/>
+    <path d="M15 390 Q38 354 54 372 Q72 346 88 382" fill={C.forest} opacity=".5" stroke={C.darkGreen} strokeWidth="1"/>
+    <path d="M318 394 Q340 356 356 374 Q374 346 396 388" fill={C.forest} opacity=".5"/>
+    <circle cx="348" cy="128" r="28" fill={C.gold} opacity=".12"/>
+    <circle cx="348" cy="128" r="22" fill={C.gold} opacity=".08"/>
+  </svg>
+);
+
+const BajingtaiScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="bj-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#0d1a30"/><stop offset="50%" stopColor="#2F4F6F"/><stop offset="100%" stopColor="#4A7C9B"/>
+      </linearGradient>
+      <radialGradient id="moon" cx="50%" cy="50%" r="50%">
+        <stop offset="0%" stopColor="#fffde0"/><stop offset="100%" stopColor="#F5F0E8"/>
+      </radialGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#bj-sky)"/>
+    {[80,155,218,295,48,352,120,270].map((x,i)=><circle key={i} cx={x} cy={22+i*14} r={1+i%2*0.5} fill="#fff" opacity=".55"/>)}
+    <circle cx="316" cy="68" r="32" fill="#F5F0E8" opacity=".15"/>
+    <circle cx="316" cy="68" r="26" fill="url(#moon)" opacity=".85"/>
+    <circle cx="326" cy="62" r="24" fill="#2F4F6F"/>
+    <rect x="0" y="268" width="400" height="132" fill={C.river} opacity=".72"/>
+    {[0,1,2,3,4].map(i=><path key={i} d={`M0 ${282+i*24} Q100 ${274+i*24} 200 ${284+i*24} Q300 ${292+i*24} 400 ${282+i*24}`} fill="none" stroke="#fff" strokeWidth=".6" opacity=".12"/>)}
+    <g transform="translate(148,108)">
+      <rect x="12" y="88" width="82" height="58" fill={C.red} opacity=".78"/>
+      {[22,40,60,72].map((x,i)=><rect key={i} x={x} y="92" width="4" height="52" fill={C.wall} opacity=".5"/>)}
+      <rect x="2" y="76" width="102" height="14" fill={C.tile}/>
+      <path d="M-6 78 L55 50 L116 78" fill={C.tile}/>
+      <path d="M-10 78 L55 46 L120 78" fill="none" stroke={C.gold} strokeWidth="1.8"/>
+      <rect x="22" y="36" width="62" height="28" fill={C.red} opacity=".68"/>
+      <rect x="12" y="26" width="82" height="12" fill={C.tile}/>
+      <path d="M6 28 L55 8 L104 28" fill={C.tile}/>
+      <path d="M2 28 L55 4 L108 28" fill="none" stroke={C.gold} strokeWidth="1.5"/>
+      <rect x="38" y="140" width="30" height="12" fill={C.ink} opacity=".5" rx="2"/>
+    </g>
+    <g transform="translate(148,268) scale(1,-0.35)" opacity=".18">
+      <rect x="12" y="88" width="82" height="58" fill={C.red}/>
+      <rect x="2" y="76" width="102" height="14" fill={C.tile}/>
+      <path d="M-6 78 L55 50 L116 78" fill={C.tile}/>
+    </g>
+  </svg>
+);
+
+const YugutaiScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="yg-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#FF8C00" stopOpacity=".55"/>
+        <stop offset="45%" stopColor="#E8C880"/>
+        <stop offset="100%" stopColor="#d4e8d4"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#yg-sky)"/>
+    <circle cx="338" cy="58" r="38" fill="#FF8C00" opacity=".32"/>
+    <circle cx="338" cy="58" r="30" fill="#FF8C00" opacity=".25"/>
+    <path d="M0 295 Q55 252 115 272 Q178 236 242 260 Q322 224 400 268 L400 400 L0 400Z" fill={C.forest} opacity=".18"/>
+    <path d="M0 312 Q78 278 165 296 Q255 264 400 308 L400 400 L0 400Z" fill={C.forest} opacity=".22"/>
+    <path d="M90 328 Q145 285 202 298 Q258 282 308 322 L308 400 L90 400Z" fill={C.forest} opacity=".3"/>
+    <path d="M90 328 Q145 285 202 298 Q258 282 308 322" fill="none" stroke={C.darkGreen} strokeWidth="2" opacity=".4"/>
+    <g transform="translate(148,175)">
+      <rect x="0" y="65" width="104" height="55" fill={C.wall} opacity=".78" rx="1"/>
+      {[15,35,55,75].map(x=><rect key={x} x={x} y="68" width="4" height="50" fill="#5A3010" opacity=".35"/>)}
+      <rect x="-8" y="55" width="120" height="12" fill={C.tile}/>
+      <path d="M-14 58 L52 32 L118 58" fill={C.tile}/>
+      <path d="M-18 58 L52 28 L122 58" fill="none" stroke={C.gold} strokeWidth="1.6"/>
+      <rect x="18" y="20" width="68" height="20" fill={C.wall} opacity=".7" rx="1"/>
+      <rect x="10" y="12" width="84" height="10" fill={C.tile}/>
+      <path d="M4 14 L52 -4 L100 14" fill={C.tile}/>
+      <path d="M0 14 L52 -8 L104 14" fill="none" stroke={C.gold} strokeWidth="1.4"/>
+    </g>
+    <rect x="0" y="345" width="400" height="55" fill={C.water} opacity=".48"/>
+    {[0,1,2].map(i=><path key={i} d={`M0 ${354+i*14} Q100 ${349+i*14} 200 ${356+i*14} Q300 ${350+i*14} 400 ${355+i*14}`} fill="none" stroke="#fff" strokeWidth=".6" opacity=".18"/>)}
+    {[[78,202],[318,214],[48,185],[354,196]].map(([x,y],i)=><path key={i} d={`M${x} ${y} Q${x+4} ${y-10} ${x+10} ${y-3} Q${x+7} ${y-14} ${x+14} ${y-6}`} fill={C.ink} opacity=".45"/>)}
+  </svg>
+);
+
+const WeiWuScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="ww-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#c8d8b8"/><stop offset="100%" stopColor="#d8e8c8"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#ww-bg)"/>
+    {[...Array(8)].map((_,i)=><path key={i} d={`M0 ${45+i*48} Q200 ${28+i*48} 400 ${50+i*48}`} fill="none" stroke={C.forest} strokeWidth="1.2" opacity=".08"/>)}
+    <rect x="95" y="95" width="210" height="210" fill={C.wall} stroke="#6B3410" strokeWidth="4" rx="3"/>
+    <rect x="110" y="110" width="180" height="180" fill="#A85520" opacity=".3" stroke="#6B3410" strokeWidth="1.5"/>
+    <rect x="155" y="155" width="90" height="90" fill={C.cream} stroke="#6B3410" strokeWidth="2" opacity=".85"/>
+    <rect x="168" y="168" width="64" height="64" fill={C.bg} opacity=".7"/>
+    {[[126,126],[163,126],[200,126],[237,126],[126,163],[126,200],[126,237],[237,163],[237,200],[237,237],[163,237],[200,237]].map(([x,y],i)=>(
+      <rect key={i} x={x} y={y} width="32" height="32" fill={C.wall} stroke="#6B3410" strokeWidth=".6" opacity=".55" rx="1"/>
+    ))}
+    <rect x="182" y="298" width="36" height="10" fill={C.ink} opacity=".55" rx="2"/>
+    <rect x="90" y="298" width="16" height="16" fill={C.tile} opacity=".5" rx="2"/>
+    <rect x="294" y="298" width="16" height="16" fill={C.tile} opacity=".5" rx="2"/>
+    <rect x="90" y="90" width="16" height="16" fill={C.tile} opacity=".5" rx="2"/>
+    <rect x="294" y="90" width="16" height="16" fill={C.tile} opacity=".5" rx="2"/>
+    {[[55,72],[340,115],[62,315],[332,338],[48,195],[348,248]].map(([x,y],i)=>(
+      <circle key={i} cx={x} cy={y} r={11+i%3*3} fill={C.forest} opacity=".28"/>
+    ))}
+    {[[148,58],[252,58],[148,358],[252,358]].map(([x,y],i)=>(
+      <circle key={`t${i}`} cx={x} cy={y} r="10" fill={C.forest} opacity=".22"/>
+    ))}
+  </svg>
+);
+
+const OrangeScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="or-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#E8F2DC"/><stop offset="100%" stopColor="#c8d8a0"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#or-bg)"/>
+    <path d="M0 310 Q100 280 200 298 Q305 268 400 310 L400 400 L0 400Z" fill={C.lightGreen} opacity=".28"/>
+    <path d="M0 345 Q100 322 200 340 Q300 318 400 345 L400 400 L0 400Z" fill={C.forest} opacity=".2"/>
+    {[[92,178,55],[198,156,64],[310,185,52]].map(([x,y,r],i)=>(
+      <g key={i}>
+        <rect x={x-5} y={y} width="10" height={322-y} fill="#7A5C3A" opacity=".45" rx="4"/>
+        <ellipse cx={x} cy={y} rx={r} ry={r*0.78} fill={C.forest} opacity=".62"/>
+        <ellipse cx={x-4} cy={y-8} rx={r-10} ry={r*0.52} fill={C.lightGreen} opacity=".38"/>
+        {[[x-22,y-4],[x+16,y+8],[x-8,y+16],[x+26,y-8],[x+2,y+4],[x-14,y+10]].map(([ox,oy],j)=>(
+          <circle key={j} cx={ox} cy={oy} r={7+j%2} fill={C.orange} opacity=".88"/>
+        ))}
+      </g>
+    ))}
+    <g transform="translate(152,328)">
+      <path d="M0 32 Q44 2 88 32" fill="#A0784A" opacity=".58"/>
+      <path d="M5 30 Q44 6 80 30" fill="#C4973B" opacity=".38"/>
+      {[[18,18],[40,12],[62,18],[28,24],[52,22],[40,28]].map(([x,y],i)=>(
+        <circle key={i} cx={x} cy={y} r="10" fill={C.orange} opacity=".9"/>
+      ))}
+    </g>
+    {[[52,105],[368,132],[28,252],[380,290]].map(([x,y],i)=>(
+      <ellipse key={i} cx={x} cy={y} rx="5" ry="7" fill="#fff" opacity=".35" transform={`rotate(${i*30} ${x} ${y})`}/>
+    ))}
+    <circle cx="50" cy="50" r="25" fill={C.orange} opacity=".12"/>
+  </svg>
+);
+
+const TeaPickingScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="tp-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#E8D5B0"/><stop offset="100%" stopColor="#d8e8d0"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#tp-sky)"/>
+    {[...Array(7)].map((_,i)=><path key={i} d={`M0 ${195+i*32} Q100 ${180+i*32} 200 ${190+i*32} Q300 ${175+i*32} 400 ${195+i*32}`} fill={C.forest} opacity={0.10+i*0.04}/>)}
+    <g transform="translate(122,112)">
+      <circle cx="22" cy="0" r="13" fill={C.pink} opacity=".82"/>
+      <ellipse cx="22" cy="-1" rx="7" ry="8" fill={C.ink} opacity=".12"/>
+      <rect x="14" y="14" width="18" height="38" fill={C.red} opacity=".68" rx="2"/>
+      <path d="M9 52 L2 84 M31 52 L38 84" stroke={C.ink} strokeWidth="2.5" opacity=".45" strokeLinecap="round"/>
+      <path d="M-6 32 Q-24 18 -18 36 Q-28 26 -22 40" fill="none" stroke={C.gold} strokeWidth="2.5" opacity=".6"/>
+      <path d="M38 28 Q58 16 52 32 Q64 22 58 38" fill={C.red} opacity=".38"/>
+    </g>
+    <g transform="translate(242,130)">
+      <circle cx="22" cy="0" r="13" fill={C.pink} opacity=".82"/>
+      <rect x="14" y="14" width="18" height="34" fill="#4A7C9B" opacity=".58" rx="2"/>
+      <path d="M9 48 L3 74 M31 48 L37 74" stroke={C.ink} strokeWidth="2.5" opacity=".45" strokeLinecap="round"/>
+      <path d="M42 22 Q54 6 50 26" fill="none" stroke={C.forest} strokeWidth="3" opacity=".48"/>
+    </g>
+    <g transform="translate(72,275)">
+      <ellipse cx="32" cy="16" rx="32" ry="16" fill={C.forest} opacity=".48"/>
+      <ellipse cx="32" cy="10" rx="26" ry="12" fill={C.lightGreen} opacity=".38"/>
+      {[-18,0,18].map((dx,i)=><ellipse key={i} cx={32+dx} cy={10} rx="5" ry="3" fill={C.lightGreen} opacity=".3"/>)}
+    </g>
+    {[[298,295],[345,278],[322,318]].map(([x,y],i)=>(
+      <g key={i}>
+        <ellipse cx={x} cy={y} rx="24" ry="14" fill={C.forest} opacity=".42"/>
+        <ellipse cx={x} cy={y-5} rx="18" ry="9" fill={C.lightGreen} opacity=".28"/>
+      </g>
+    ))}
+    <path d="M200 90 Q210 75 218 85 Q226 70 235 82" fill="none" stroke={C.forest} strokeWidth="2" opacity=".4"/>
+  </svg>
+);
+
+const TongtianyanScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="tty-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#C4973B" stopOpacity=".4"/>
+        <stop offset="100%" stopColor="#8B6B4A"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="#b8946a"/>
+    <rect width="400" height="400" fill="url(#tty-bg)" opacity=".6"/>
+    <ellipse cx="200" cy="180" rx="140" ry="110" fill="#7A5030" opacity=".8"/>
+    <ellipse cx="200" cy="195" rx="100" ry="80" fill="#5C3A20" opacity=".9"/>
+    <ellipse cx="200" cy="200" rx="70" ry="58" fill="#2C1A0A" opacity=".95"/>
+    <path d="M130 185 Q200 155 270 185" fill="#1A0E04" opacity=".8"/>
+    {[[140,240,22,38],[175,265,18,30],[215,258,20,35],[248,242,19,32]].map(([x,y,w,h],i)=>(
+      <g key={i}>
+        <ellipse cx={x} cy={y-h/2} rx={w/2} ry={h/2} fill={C.ink} opacity=".5"/>
+        <circle cx={x-w/5} cy={y-h/3} r={w/4} fill={C.gold} opacity=".35"/>
+      </g>
+    ))}
+    {[[80,200,45,80],[310,210,48,75]].map(([x,y,w,h],i)=>(
+      <path key={i} d={`M${x} ${y} Q${x+w/2} ${y-h} ${x+w} ${y}`} fill="#7A5030" opacity=".6"/>
+    ))}
+    <path d="M0 320 Q100 290 200 310 Q300 280 400 320 L400 400 L0 400Z" fill="#5C3A20" opacity=".5"/>
+    <path d="M0 360 Q100 340 200 355 Q300 332 400 360 L400 400 L0 400Z" fill="#3A2010" opacity=".6"/>
+    {[[60,160],[340,155],[45,250],[355,245]].map(([x,y],i)=>(
+      <circle key={i} cx={x} cy={y} r="4" fill={C.gold} opacity=".4"/>
+    ))}
+  </svg>
+);
+
+const SanbaishanScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="sbs-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#c8e8f8"/><stop offset="100%" stopColor="#e8f4e8"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#sbs-sky)"/>
+    {[0,1,2,3].map(i=>(
+      <path key={i} d={`M${140+i*18} 0 Q${148+i*18} 80 ${152+i*18} 160`} fill="none" stroke="#bcd8f0" strokeWidth={6-i} opacity=".5"/>
+    ))}
+    <path d="M130 0 Q145 70 148 170 Q152 70 160 0" fill="#c8e8f8" opacity=".6"/>
+    <path d="M0 380 Q50 310 100 340 Q150 280 200 320 Q250 270 300 305 Q350 268 400 295 L400 400 L0 400Z" fill={C.forest} opacity=".35"/>
+    <path d="M0 400 Q50 350 100 370 Q150 330 200 355 Q250 325 300 345 Q350 315 400 340 L400 400Z" fill={C.forest} opacity=".5"/>
+    {[[42,100,18],[88,72,22],[140,52,26],[65,125,14]].map(([x,y,r],i)=>(
+      <ellipse key={i} cx={x} cy={y} rx={r} ry={r*0.7} fill={C.forest} opacity=".45"/>
+    ))}
+    {[[310,95,20],[358,72,24],[268,115,16]].map(([x,y,r],i)=>(
+      <ellipse key={i} cx={x} cy={y} rx={r} ry={r*0.7} fill={C.forest} opacity=".45"/>
+    ))}
+    <path d="M178 0 Q185 120 188 200 Q192 120 200 0" fill="white" opacity=".75"/>
+    <rect x="175" y="195" width="50" height="120" fill={C.water} opacity=".35"/>
+    {[0,1,2].map(i=>(
+      <path key={i} d={`M175 ${220+i*25} Q200 ${215+i*25} 225 ${222+i*25}`} fill="none" stroke="#4A7C9B" strokeWidth="1" opacity=".5"/>
+    ))}
+  </svg>
+);
+
+const DoushuihuScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="dsh-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#a8d0e8"/><stop offset="100%" stopColor="#c8e8f8"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#dsh-bg)"/>
+    {[0,1,2,3,4,5,6].map(i=>(
+      <path key={i} d={`M0 ${200+i*30} Q100 ${188+i*30} 200 ${200+i*30} Q300 ${192+i*30} 400 ${200+i*30}`}
+        fill="none" stroke="#4A7C9B" strokeWidth=".8" opacity=".25"/>
+    ))}
+    {[[80,200,55,32],[130,265,48,30],[200,188,60,38],[270,240,52,34],[330,200,55,35],
+      [55,300,45,28],[170,330,50,32],[245,310,48,30],[345,285,52,34],[110,175,42,26]].map(([x,y,w,h],i)=>(
+      <ellipse key={i} cx={x} cy={y} rx={w/2} ry={h/2} fill={C.forest} opacity={.4+i%3*.08}/>
+    ))}
+    {[[150,225],[220,300],[310,250]].map(([x,y],i)=>(
+      <g key={i}>
+        <path d={`M${x-12} ${y+8} Q${x} ${y-2} ${x+12} ${y+8}`} fill="#c8a870" opacity=".7"/>
+        <path d={`M${x-8} ${y+8} Q${x} ${y+4} ${x+8} ${y+8}`} fill="none" stroke="#a08050" strokeWidth=".8" opacity=".6"/>
+        <path d={`M${x} ${y+2} L${x} ${y-14}`} stroke="#888" strokeWidth="1.2" opacity=".5"/>
+        <path d={`M${x} ${y-14} Q${x+10} ${y-12} ${x+8} ${y-6}`} fill="none" stroke="#888" strokeWidth="1" opacity=".45"/>
+      </g>
+    ))}
+    <path d="M0 30 Q80 20 160 35 Q240 15 320 32 Q370 22 400 35 L400 0 L0 0Z" fill="#a8d0e8" opacity=".3"/>
+  </svg>
+);
+
+const FolkSongScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="fs-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#c8e0d8"/><stop offset="100%" stopColor="#e8f4e0"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#fs-sky)"/>
+    {[...Array(5)].map((_,i)=><path key={i} d={`M0 ${250+i*32} Q100 ${232+i*32} 200 ${244+i*32} Q300 ${228+i*32} 400 ${248+i*32}`} fill={C.forest} opacity={0.10+i*0.04}/>)}
+    <g transform="translate(80,130)">
+      <circle cx="20" cy="0" r="16" fill={C.pink} opacity=".8"/>
+      <rect x="10" y="18" width="22" height="42" fill={C.red} opacity=".65" rx="3"/>
+      <path d="M5 60 L0 95 M30 60 L34 95" stroke={C.ink} strokeWidth="3" opacity=".4" strokeLinecap="round"/>
+      <path d="M10 35 Q-10 28 -5 42" fill="none" stroke={C.gold} strokeWidth="2.5" opacity=".55"/>
+      <path d="M40 30 Q60 22 55 38" fill="none" stroke={C.gold} strokeWidth="2.5" opacity=".55"/>
+    </g>
+    <g transform="translate(260,142)">
+      <circle cx="20" cy="0" r="16" fill={C.pink} opacity=".8"/>
+      <rect x="10" y="18" width="22" height="42" fill="#4A7C9B" opacity=".58" rx="3"/>
+      <path d="M5 60 L1 95 M30 60 L34 95" stroke={C.ink} strokeWidth="3" opacity=".4" strokeLinecap="round"/>
+      <path d="M10 30 Q-8 24 -4 38" fill="none" stroke={C.forest} strokeWidth="2.5" opacity=".5"/>
+    </g>
+    {[[140,90],[180,75],[215,88],[248,78]].map(([x,y],i)=>(
+      <text key={i} x={x} y={y} fontSize="12" fill={C.gold} opacity=".55" fontFamily="serif">♪</text>
+    ))}
+    <path d="M188 185 Q200 170 212 185" fill="none" stroke={C.ink} strokeWidth="1.5" opacity=".3"/>
+  </svg>
+);
+
+const RiceFishScene = () => (
+  <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" style={{width:"100%",height:"100%",display:"block"}}>
+    <defs>
+      <linearGradient id="rf-bg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f8e8d0"/><stop offset="100%" stopColor="#f0d8b8"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" fill="url(#rf-bg)"/>
+    {[...Array(5)].map((_,i)=>(
+      <circle key={i} cx={80+i*64} cy={80} r={28+i%3*4} fill="none" stroke="#888" strokeWidth="2" opacity=".2"/>
+    ))}
+    <ellipse cx="200" cy="185" rx="120" ry="90" fill="#e8d0a8" opacity=".5" stroke="#888" strokeWidth="2"/>
+    <ellipse cx="200" cy="180" rx="112" ry="82" fill="#f0e8d8" opacity=".7"/>
+    {[[158,155],[182,150],[205,148],[228,152],[252,158],[165,172],[188,168],[212,166],[235,170],[175,188],[198,184],[222,188]].map(([x,y],i)=>(
+      <ellipse key={i} cx={x} cy={y} rx="14" ry="8" fill="#f8a050" opacity=".7"/>
+    ))}
+    <path d="M145 200 Q180 168 215 160 Q250 155 265 180 Q270 210 240 225 Q205 238 168 228 Z" fill="#f07038" opacity=".5"/>
+    {[[160,200],[188,218],[218,222],[245,210]].map(([x,y],i)=>(
+      <circle key={i} cx={x} cy={y} r="5" fill="#888" opacity=".3"/>
+    ))}
+    <ellipse cx="200" cy="185" rx="30" ry="20" fill="none" stroke="#d09060" strokeWidth="2" opacity=".35"/>
+    <path d="M80 280 Q200 260 320 280 L320 350 Q200 368 80 350Z" fill="#8B6B4A" opacity=".3"/>
+    {[...Array(7)].map((_,i)=>(
+      <rect key={i} x={92+i*32} y={268} width="18" height="72" fill="#6B4A28" opacity=".2" rx="2"/>
+    ))}
+    <rect x="148" y="250" width="104" height="28" fill="#888" opacity=".15" rx="4"/>
+  </svg>
+);
+
+// 场景映射
+const SCENES = {
+  "city-wall": CityWallScene,
+  "bajingtai": BajingtaiScene,
+  "yugutai": YugutaiScene,
+  "weiWu": WeiWuScene,
+  "orange": OrangeScene,
+  "teaPicking": TeaPickingScene,
+  "tongtianyan": TongtianyanScene,
+  "sanbaisan": SanbaishanScene,
+  "doushuihu": DoushuihuScene,
+  "folkSong": FolkSongScene,
+  "riceFish": RiceFishScene,
+};
+
+// ═══════════════════════════════════════════════════════
+// 章节与关卡数据
+// ═══════════════════════════════════════════════════════
+const CHAPTERS = [
+  {
+    id:"ch1", title:"千年宋城", subtitle:"历史古迹", color:C.wall, unlockStars:0,
+    desc:"赣州古城历经千年，宋代古迹保存完好，被誉为中国宋代历史的活化石。",
+    levels:[
+      {id:"city-wall", title:"赣州古城墙", grid:3, stars:[50,30,20], time:null, scene:"city-wall"},
+      {id:"bajingtai", title:"八境台", grid:3, stars:[50,30,20], time:null, scene:"bajingtai"},
+      {id:"yugutai", title:"郁孤台", grid:4, stars:[150,100,60], time:300, scene:"yugutai"},
+    ]
+  },
+  {
+    id:"ch2", title:"客家围屋", subtitle:"建筑文化", color:C.forest, unlockStars:3,
+    desc:"客家围屋是客家先民聚族而居、防御外敌的智慧结晶，被誉为东方古罗马城堡。",
+    levels:[
+      {id:"weiWu", title:"关西新围", grid:4, stars:[150,100,60], time:300, scene:"weiWu"},
+      {id:"orange", title:"赣南脐橙", grid:3, stars:[50,30,20], time:null, scene:"orange"},
+      {id:"teaPicking", title:"赣南采茶戏", grid:4, stars:[150,100,60], time:300, scene:"teaPicking"},
+    ]
+  },
+  {
+    id:"ch3", title:"山水赣南", subtitle:"自然风光", color:C.river, unlockStars:9,
+    desc:"赣南山川秀美，通天岩石窟、三百山原始森林、陡水湖碧波荡漾。",
+    levels:[
+      {id:"tongtianyan", title:"通天岩石窟", grid:4, stars:[150,100,60], time:300, scene:"tongtianyan"},
+      {id:"sanbaisan", title:"三百山", grid:5, stars:[300,200,120], time:480, scene:"sanbaisan"},
+      {id:"doushuihu", title:"陡水湖", grid:5, stars:[300,200,120], time:480, scene:"doushuihu"},
+    ]
+  },
+  {
+    id:"ch4", title:"采茶戏韵", subtitle:"民俗文化", color:C.gold, unlockStars:18,
+    desc:"赣南采茶戏与客家山歌，是赣南人民世代传承的非物质文化遗产。",
+    levels:[
+      {id:"folkSong", title:"兴国山歌", grid:4, stars:[150,100,60], time:300, scene:"folkSong"},
+      {id:"teaPicking2", title:"矮子步表演", grid:5, stars:[300,200,120], time:480, scene:"teaPicking"},
+      {id:"weiWu2", title:"客家婚俗", grid:5, stars:[300,200,120], time:480, scene:"weiWu"},
+    ]
+  },
+  {
+    id:"ch5", title:"客家味道", subtitle:"美食文化", color:C.orange, unlockStars:27,
+    desc:"赣南美食融合客家饮食文化，脐橙、米粉鱼、酱干享誉全国。",
+    levels:[
+      {id:"orange2", title:"赣南脐橙园", grid:3, stars:[50,30,20], time:null, scene:"orange"},
+      {id:"riceFish", title:"兴国米粉鱼", grid:5, stars:[300,200,120], time:480, scene:"riceFish"},
+      {id:"riceFish2", title:"客家酱干", grid:5, stars:[300,200,120], time:480, scene:"riceFish"},
+    ]
+  },
+];
+
+// ═══════════════════════════════════════════════════════
+// 文化科普数据
+// ═══════════════════════════════════════════════════════
+const CULTURE = {
+  "city-wall":{
+    title:"赣州古城墙", era:"北宋 · 嘉祐年间", loc:"赣州市章贡区",
+    desc:'赣州古城墙始建于汉代，现存城墙为北宋嘉祐年间知州孔宗翰重修，全长3664米，是全国保存最完好、规模最大的宋代砖城墙。城墙上留有数以万计刻有铭文的城砖，记录不同年代修缮历史，堪称"宋城博物馆"。登上城墙，可见章、贡二水在脚下交汇，蔚为壮观。',
+    highlights:["全长3664米，宋代砖城墙保存最完好","城砖铭文相当于古代质量追溯系统","章贡两江在此交汇，风景绝佳","与北京八达岭长城同为国家重点文物"],
+    fact:"城砖上刻有烧制年份和工匠姓名，如有质量问题可追责到人，是中国最早的产品质量认证制度之一。",
+    poem:{title:"虔州八境图八首（其一）",author:"苏轼",dynasty:"北宋",text:"坐看奔湍绕石楼，使君高会百无忧。"},
+  },
+  "bajingtai":{
+    title:"八境台", era:"北宋 · 嘉祐年间", loc:"赣州市章贡区",
+    desc:"八境台位于赣州城北章水与贡水交汇处的古城墙上，始建于北宋嘉祐年间，因孔宗翰绘制《虔州八境图》而得名。苏轼曾作《虔州八境图八首》，使八境台名扬天下。登台远眺，可尽览章贡二水合流、山城相拥的壮阔景象，夜色下灯火辉煌，别有一番意境。",
+    highlights:["赣州城北制高点，俯瞰章贡二水合流","因苏轼诗作而名垂千古","历代文人墨客登临吟咏之地","三层楼阁，飞檐翘角，古典建筑典范"],
+    fact:"八境台古时兼具军事瞭望与文人雅集的双重功能，相传苏轼曾在此与友人饮酒作诗，留下千古佳作。",
+    poem:{title:"虔州八境图八首",author:"苏轼",dynasty:"北宋",text:"涛头寂寞打城还，章贡台前暮霭寒。"},
+  },
+  "yugutai":{
+    title:"郁孤台", era:"唐代始建", loc:"赣州市章贡区贺兰山",
+    desc:'郁孤台坐落在赣州城区西北贺兰山顶，因"隆阜郁然，孤起平地数丈"得名。始建于唐代，历代屡有修建。南宋爱国词人辛弃疾任江西提点刑狱时登临此台，写下千古名篇《菩萨蛮·书江西造口壁》，一句"郁孤台下清江水，中间多少行人泪"道尽家国之思，令无数后人动容。',
+    highlights:["辛弃疾代表词作发生地","唐代始建，历经宋明清三代修缮","俯瞰赣州城全景及清江","南宋家国情怀的精神地标"],
+    fact:"辛弃疾写这首词时官任江西提点刑狱，路过造口壁触景生情。彼时金兵南下，百姓流离失所，这首词成为南宋亡国之悲的象征。",
+    poem:{title:"菩萨蛮·书江西造口壁",author:"辛弃疾",dynasty:"南宋",text:"郁孤台下清江水，中间多少行人泪。西北望长安，可怜无数山。"},
+  },
+  "weiWu":{
+    title:"关西新围", era:"清 · 嘉庆年间", loc:"赣州市龙南市关西镇",
+    desc:'关西新围是中国最大的客家方形围屋，由关西名绅徐名钧历时数十年建造，占地约27000平方米。围屋呈"国"字形布局，外墙高大坚固，内设祠堂、天井、走马楼、炮楼等，可容纳数百人同时居住。四角炮楼，墙上枪眼密布，防御体系完备，堪称一座自给自足的小型城池。',
+    highlights:["中国最大的客家方形围屋","占地约27000平方米","外墙厚达1米，四角设炮楼","聚族而居，体现客家智慧"],
+    fact:"围屋外墙内暗藏循环水系，既可防火，又能在围困时提供饮水。这一设计比现代消防概念早了两百年。",
+  },
+  "weiWu2":{
+    title:"客家婚俗", era:"传统习俗", loc:"赣南客家地区",
+    desc:'客家传统婚俗遵循古代"六礼"：纳采、问名、纳吉、纳征、请期、亲迎。婚礼当天，花轿迎亲，唢呐声声，鞭炮齐鸣。新娘着红妆，盖头红盖，由兄弟或父亲背上花轿。到达男方家门前，还需跨火盆、踩红毡，象征吉祥如意，红红火火。',
+    highlights:["保留完整六礼婚俗传统","花轿迎亲，唢呐队伍盛大","跨火盆、踩红毡等仪式","婚礼三天，亲友共聚热闹"],
+    fact:'客家花轿迎亲时，轿夫必须踏着特定步伐行进，名为"龙步"，象征龙凤呈祥，一路平安。',
+  },
+  "orange":{
+    title:"赣南脐橙", era:"1971年引种", loc:"赣州市各县区",
+    desc:'赣南脐橙是赣州最亮丽的名片。赣南地区独特的红壤丘陵、充足的光照和适宜的昼夜温差，造就了赣南脐橙果大形正、橙红鲜艳、肉质脆嫩、风味浓甜的优良品质。种植面积和产量均居世界第一，享有"中华名果"的美誉，每年金秋时节，漫山脐橙压枝头，橙香飘满赣南。',
+    highlights:["种植面积世界第一，超170万亩","独特红壤丘陵造就优良品质","远销30多个国家和地区",'脱贫攻坚"一颗橙"，致富一方人'],
+    fact:"赣南脐橙每年产量约150万吨。每到丰收季节，赣南高速公路上满载脐橙的货车绵延数公里，蔚为壮观。",
+  },
+  "orange2":{
+    title:"赣南脐橙园", era:"金秋十月", loc:"赣州市安远县等地",
+    desc:'每到金秋，赣南山坡上脐橙林满目金黄，果农们忙碌采摘的景象宛如画卷。赣南脐橙有"无籽肉嫩、化渣爽口、甜酸适中"的特点，维生素C含量极高，深受消费者喜爱。',
+    highlights:["金秋丰收，满山橙黄如画","维生素C含量高，营养丰富","赣南扶贫攻坚重要产业","品种包括纽荷尔、朋娜等"],
+    fact:"赣南脐橙的橙皮中含有丰富的精油，当地人常将橙皮晒干入药，有理气健脾、燥湿化痰的功效。",
+  },
+  "teaPicking":{
+    title:"赣南采茶戏", era:"明末清初", loc:"赣州市安远县",
+    desc:'赣南采茶戏发源于安远县九龙山茶区，是国家级非物质文化遗产。其表演以"矮子步""扇子花""单袖筒"三大技艺为特色，载歌载舞，诙谐幽默，充满浓郁的乡土气息。代表剧目有《九龙山摘茶》《补皮鞋》《钓拐》等，深受百姓喜爱，被誉为"赣南艺术的活化石"。',
+    highlights:["国家级非物质文化遗产","矮子步、扇子花、单袖筒三大绝技","起源于明末茶区劳动歌谣","已有近400年历史"],
+    fact:'矮子步要求演员蹲着走，双膝始终弯曲，长时间表演下来腿部极为酸痛，有"台上一分钟，台下十年功"之说。',
+  },
+  "teaPicking2":{
+    title:"矮子步表演", era:"明末清初至今", loc:"赣州市各地",
+    desc:"矮子步是赣南采茶戏最具代表性的表演技艺之一。演员需保持半蹲姿势，小步快走，步伐轻盈灵活，同时还要配合唱腔和扇子花，展现出采茶女劳动时的轻快姿态。这一技艺从茶山劳动中提炼而来，虽看似轻松，实则对演员的体能和技巧要求极高。",
+    highlights:["演员需长时间保持半蹲姿态","小步快走，步法多变灵活","配合扇子花和单袖筒","体现劳动人民的智慧与美感"],
+    fact:"专业采茶戏演员从7、8岁开始练习矮子步，通常需要十年以上才能达到炉火纯青的境界。",
+  },
+  "tongtianyan":{
+    title:"通天岩石窟", era:"唐代始凿", loc:"赣州市西北22公里",
+    desc:'通天岩石窟是江南最大的石窟寺，始凿于唐代，历经唐、宋、元、明、清五代连续开凿，保存唐宋摩崖造像359尊，其中最高的弥勒佛像高达6.6米，被誉为"江南第一石窟"。石窟依山势而凿，分布在数百米长的天然岩壁上，石刻造像工艺精湛，历经千年仍栩栩如生。',
+    highlights:["江南最大石窟寺","保存摩崖造像359尊","历经唐宋元明清五代","最高弥勒佛像6.6米"],
+    fact:"通天岩在唐宋时期曾是赣州官员和文人雅士的游览胜地，苏轼、王安石、辛弃疾等都曾在此留下墨宝或到访记录。",
+  },
+  "sanbaisan":{
+    title:"三百山", era:"原始森林", loc:"赣州市安远县",
+    desc:'三百山国家森林公园位于安远县，是东江的发源地。东江是珠江的支流，香港同胞饮用的东江水便源于此处。三百山原始森林保护完好，林间清泉奔涌，瀑布飞流，空气中负氧离子含量极高，被称为"天然氧吧"。山中珍稀动植物繁多，是重要的生态保护区。',
+    highlights:["东江源头，香港饮水源","国家森林公园","原始森林保护完好","被称为天然氧吧"],
+    fact:'香港每年消耗的生产生活用水中，约80%来自东江水，而三百山正是东江的源头，因此三百山被香港同胞亲切称为"生命之源"。',
+  },
+  "doushuihu":{
+    title:"陡水湖", era:"1957年建成", loc:"赣州市上犹县",
+    desc:'陡水湖是赣南最大的人工湖，因1957年建成的上犹江水电站大坝蓄水形成，湖面面积达76平方公里，湖中分布着600多个大小岛屿，被誉为"赣南千岛湖"。湖水清澈碧绿，湖中盛产鱼类，周边绿山环绕，风景秀美。每当秋冬时节，薄雾笼罩，宛如人间仙境。',
+    highlights:["赣南最大人工湖","湖面76平方公里","600多个岛屿，赣南千岛湖","上犹江水电站，赣南电力摇篮"],
+    fact:'陡水湖的600多个岛屿中，有一个岛屿形状极似一只展翅的凤凰，当地人称之为"凤凰岛"，每逢夕阳西下，金光万道，蔚为壮观。',
+  },
+  "folkSong":{
+    title:"兴国山歌", era:"唐宋以来", loc:"赣州市兴国县",
+    desc:'兴国山歌是赣南客家民歌的杰出代表，是国家级非物质文化遗产。兴国山歌以"哎呀嘞"为标志性衬词，曲调高亢嘹亮，感情真挚朴实，内容涵盖劳动、爱情、革命斗争等各方面。毛泽东曾高度赞扬"兴国的山歌多"，红军时期大量使用山歌进行宣传动员。',
+    highlights:["国家级非物质文化遗产","标志性衬词'哎呀嘞'","毛泽东高度赞扬","红色革命山歌传唱至今"],
+    fact:"兴国山歌的即兴创作能力极强，民间山歌手可以针对任何人、任何事即兴填词演唱，对歌时往往妙语连珠，令人叹服。",
+  },
+  "riceFish":{
+    title:"兴国米粉鱼", era:"传统美食", loc:"赣州市兴国县",
+    desc:'兴国米粉鱼，又称"四星望月"，是赣菜的代表性菜肴。选用新鲜草鱼，加米粉、辣椒、豆豉等配料，用大锅蒸制而成，鱼肉鲜嫩，米粉软糯，香气四溢。相传毛泽东在兴国视察时品尝此菜后，因盘中的鱼形如月亮、四周点缀辅料如繁星，遂命名为"四星望月"。',
+    highlights:["赣菜代表性菜肴","蒸制而成，原汁原味","毛泽东亲赐四星望月之名","兴国县宴客必备菜肴"],
+    fact:'兴国米粉鱼的"米粉"并非细如丝线的米线，而是大米经浸泡、磨浆、调味后制成的粗颗粒，裹在鱼身上蒸制，口感独特。',
+  },
+  "riceFish2":{
+    title:"会昌酱干", era:"百年传承", loc:"赣州市会昌县",
+    desc:'会昌酱干以会昌县本地产的优质大豆为原料，经传统工艺制作而成，色泽棕褐，质地紧密，香味浓郁，咸淡适中，是著名的客家豆制品。毛泽东曾在会昌县工作期间多次食用并大加赞赏，有"会昌子"之美称，令其知名度大增，远销省内外。',
+    highlights:["优质大豆原料，传统工艺制作","毛泽东赞称'会昌子'","色泽棕褐，香味浓郁","可保存较长时间，便于携带"],
+    fact:"会昌酱干的独特风味来自当地的山泉水。制作过程中使用山泉水点豆腐、压制成型，正是这种软硬适中的水质赋予了酱干特殊的口感。",
+  },
+};
+
+// ═══════════════════════════════════════════════════════
+// 拼图引擎
+// ═══════════════════════════════════════════════════════
+function countInversions(arr) {
+  let inv = 0;
+  for (let i = 0; i < arr.length; i++)
+    for (let j = i + 1; j < arr.length; j++)
+      if (arr[i] && arr[j] && arr[i] > arr[j]) inv++;
+  return inv;
+}
+
+function isSolvable(tiles, size) {
+  const inv = countInversions(tiles);
+  if (size % 2 === 1) return inv % 2 === 0;
+  const emptyRow = Math.floor(tiles.indexOf(0) / size);
+  const fromBottom = size - emptyRow;
+  return (inv + fromBottom) % 2 === 1;
+}
+
+function shuffleTiles(size) {
+  const n = size * size;
+  let tiles;
+  do {
+    tiles = Array.from({length:n}, (_,i) => (i+1) % n);
+    for (let i = n-1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i+1));
+      [tiles[i], tiles[j]] = [tiles[j], tiles[i]];
+    }
+    if (!isSolvable(tiles, size)) {
+      const a = tiles[0] === 0 ? 1 : 0;
+      const b = tiles[1] === 0 ? 2 : 1;
+      [tiles[a], tiles[b]] = [tiles[b], tiles[a]];
+    }
+  } while (tiles.every((v,i) => v === (i+1) % n));
+  return tiles;
+}
+
+function isComplete(tiles) {
+  return tiles.every((v,i) => v === (i+1) % tiles.length);
+}
+
+function isAdjacent(idx, emptyIdx, size) {
+  const r1 = Math.floor(idx/size), c1 = idx%size;
+  const r2 = Math.floor(emptyIdx/size), c2 = emptyIdx%size;
+  return (Math.abs(r1-r2) + Math.abs(c1-c2)) === 1;
+}
+
+// localStorage 存取
+const STORAGE_KEY = "ganzhou-puzzle-v1";
+function loadProgress() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"); } catch { return {}; }
+}
+function saveProgress(p) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)); } catch {}
+}
+
+function fmtTime(s) {
+  const m = Math.floor(s/60);
+  return `${String(m).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+}
+
+// ═══════════════════════════════════════════════════════
+// Stars 组件
+// ═══════════════════════════════════════════════════════
+const Stars = ({count, size=20, animated=false}) => (
+  <span className="inline-flex gap-1">
+    {[1,2,3].map(i=>(
+      <svg key={i} width={size} height={size} viewBox="0 0 24 24"
+        style={animated && i<=count ? {animation:`starPop .4s ${(i-1)*300}ms ease both`} : {}}>
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+          fill={i<=count ? C.gold : "#ddd"}
+          stroke={i<=count ? "#a07820" : "#ccc"} strokeWidth="1"/>
+      </svg>
+    ))}
+  </span>
+);
+
+// ═══════════════════════════════════════════════════════
+// SceneTile — 带 SVG 背景切片的方块
+// ═══════════════════════════════════════════════════════
+const SceneTile = memo(({value, index, size, boardPx, isMovable, onClick, sceneId}) => {
+  if (value === 0) return null;
+  const gap = 2;
+  const tileSize = (boardPx - (size+1)*gap) / size;
+  const row = Math.floor(index/size), col = index%size;
+  const srcRow = Math.floor((value-1)/size), srcCol = (value-1)%size;
+  const x = col*(tileSize+gap) + gap;
+  const y = row*(tileSize+gap) + gap;
+  const SceneComp = SCENES[sceneId];
+
+  return (
+    <div
+      onClick={() => onClick(index)}
+      style={{
+        position:"absolute",
+        width:tileSize, height:tileSize,
+        left:x, top:y,
+        transition:"left 0.14s ease-out, top 0.14s ease-out, box-shadow 0.15s",
+        borderRadius:5,
+        overflow:"hidden",
+        cursor: isMovable ? "pointer" : "default",
+        boxShadow: isMovable
+          ? "0 3px 14px rgba(0,0,0,0.24), 0 0 0 2px rgba(196,151,59,0.4)"
+          : "0 1px 4px rgba(0,0,0,0.14)",
+        zIndex: isMovable ? 2 : 1,
+        transform: isMovable ? "scale(1.015)" : "scale(1)",
+        touchAction:"manipulation",
+        userSelect:"none",
+      }}
+    >
+      <div style={{
+        width: boardPx - gap*2,
+        height: boardPx - gap*2,
+        position:"absolute",
+        left: -(srcCol*(tileSize+gap)),
+        top: -(srcRow*(tileSize+gap)),
+        pointerEvents:"none",
+      }}>
+        {SceneComp && <SceneComp/>}
+      </div>
+    </div>
+  );
+});
+
+// ═══════════════════════════════════════════════════════
+// Toast 通知
+// ═══════════════════════════════════════════════════════
+function Toast({msg, visible}) {
+  if (!visible) return null;
+  return (
+    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full text-sm font-medium shadow-lg"
+      style={{background:C.ink, color:C.cream, animation:"slideUp .3s ease-out"}}>
+      {msg}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// 主菜单
+// ═══════════════════════════════════════════════════════
+function MainMenu({onStart, onShare}) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 relative overflow-hidden"
+      style={{background:`linear-gradient(170deg, ${C.sky} 0%, ${C.bg} 40%, #d4e8d4 100%)`}}>
+
+      {/* 山水装饰 */}
+      <svg viewBox="0 0 400 130" className="w-full max-w-sm mb-4 opacity-25" style={{maxWidth:340}}>
+        <path d="M0 130 Q40 55 90 85 Q145 42 200 75 Q260 35 320 68 Q370 50 400 82 L400 130Z" fill={C.forest}/>
+        <path d="M0 130 Q80 88 165 100 Q248 74 325 95 Q380 80 400 105 L400 130Z" fill={C.forest} opacity=".5"/>
+        <path d="M0 125 Q100 98 200 112 Q305 92 400 115 L400 130 L0 130Z" fill={C.river} opacity=".25"/>
+      </svg>
+
+      {/* 波浪动画 */}
+      <div className="wave-wrap" style={{height:50, bottom:0}}>
+        <svg className="wave-svg" viewBox="0 0 800 50" preserveAspectRatio="none" style={{height:"100%"}}>
+          <path d="M0 30 Q100 10 200 30 Q300 50 400 30 Q500 10 600 30 Q700 50 800 30 V50 H0Z" fill={C.river} opacity=".08"/>
+        </svg>
+      </div>
+
+      <h1 className="text-4xl md:text-5xl font-bold tracking-wider mb-1.5 text-center"
+        style={{color:C.ink, fontFamily:"'Noto Serif SC','SimSun',serif"}}>
+        赣州风物志
+      </h1>
+      <p className="text-sm mb-10 tracking-widest" style={{color:C.tile}}>
+        滑块拼图 · 品味赣南
+      </p>
+
+      <div className="flex flex-col items-center gap-3 w-full max-w-xs">
+        <button onClick={onStart}
+          className="w-full px-8 py-3.5 rounded-xl text-lg font-semibold tracking-wider transition-all duration-200 active:scale-95"
+          style={{background:`linear-gradient(135deg, ${C.wall}, ${C.red})`, color:C.cream, boxShadow:"0 4px 20px rgba(139,69,19,0.3)"}}>
+          开始游戏
+        </button>
+
+        <button onClick={onShare}
+          className="w-full px-8 py-3 rounded-xl text-base font-medium tracking-wider transition-all duration-200 active:scale-95 flex items-center justify-center gap-2"
+          style={{background:`${C.gold}18`, color:C.gold, border:`1.5px solid ${C.gold}40`}}>
+          <span>🔗</span> 分享游戏
+        </button>
+      </div>
+
+      <p className="mt-12 text-xs opacity-35 text-center" style={{color:C.ink}}>
+        一款赣州人文地理主题拼图游戏<br/>5章 · 15关 · 品味赣南千年文化
+      </p>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// 章节选择
+// ═══════════════════════════════════════════════════════
+function ChapterSelect({onSelect, onBack, progress}) {
+  const totalStars = Object.values(progress).reduce((s,v) => s+(v.stars||0), 0);
+  return (
+    <div className="min-h-screen" style={{background:C.bg}}>
+      <div className="max-w-lg mx-auto px-4 pt-6 pb-8">
+        <div className="flex items-center mb-6">
+          <button onClick={onBack} className="text-2xl mr-3 active:scale-90 transition-transform p-1" style={{color:C.ink}}>←</button>
+          <h2 className="text-xl font-bold flex-1" style={{color:C.ink, fontFamily:"'Noto Serif SC',serif"}}>选择章节</h2>
+          <span className="text-sm flex items-center gap-1" style={{color:C.gold}}>
+            <Stars count={1} size={14}/> {totalStars} 颗星
+          </span>
+        </div>
+        <div className="space-y-3.5">
+          {CHAPTERS.map(ch=>{
+            const unlocked = totalStars >= ch.unlockStars;
+            const chStars = ch.levels.reduce((s,l) => s+(progress[l.id]?.stars||0), 0);
+            return (
+              <button key={ch.id} onClick={() => unlocked && onSelect(ch)} disabled={!unlocked}
+                className="w-full text-left rounded-2xl p-4 transition-all duration-200 active:scale-[0.985]"
+                style={{
+                  background: unlocked ? `linear-gradient(135deg, ${ch.color}14, ${ch.color}06)` : "#ece8e0",
+                  border:`2px solid ${unlocked ? ch.color+"35" : "#e0d8cc"}`,
+                  opacity: unlocked ? 1 : 0.55,
+                }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-base font-bold" style={{color: unlocked ? C.ink : "#999"}}>
+                      {!unlocked && "🔒 "}{ch.title}
+                    </div>
+                    <div className="text-xs mt-0.5 mb-1" style={{color: unlocked ? C.tile : "#bbb"}}>
+                      {ch.subtitle} · {ch.levels.length}关
+                    </div>
+                    {unlocked && <div className="text-xs opacity-60 leading-snug" style={{color:C.ink}}>{ch.desc.slice(0,42)}…</div>}
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-3">
+                    <Stars count={Math.min(3,Math.floor(chStars/ch.levels.length))} size={15}/>
+                    <div className="text-xs mt-1" style={{color:C.tile}}>{chStars}/{ch.levels.length*3}</div>
+                  </div>
+                </div>
+                {!unlocked && (
+                  <div className="text-xs mt-1.5" style={{color:"#aaa"}}>
+                    需累积 {ch.unlockStars} 颗星解锁（当前 {totalStars} 颗）
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// 关卡选择
+// ═══════════════════════════════════════════════════════
+function LevelSelect({chapter, onSelect, onBack, progress}) {
+  return (
+    <div className="min-h-screen" style={{background:C.bg}}>
+      <div className="max-w-lg mx-auto px-4 pt-6 pb-8">
+        <div className="flex items-center mb-5">
+          <button onClick={onBack} className="text-2xl mr-3 active:scale-90 transition-transform p-1" style={{color:C.ink}}>←</button>
+          <div>
+            <h2 className="text-lg font-bold" style={{color:C.ink, fontFamily:"'Noto Serif SC',serif"}}>{chapter.title}</h2>
+            <p className="text-xs" style={{color:C.tile}}>{chapter.subtitle}</p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {chapter.levels.map((level,i)=>{
+            const record = progress[level.id];
+            const SceneComp = SCENES[level.scene];
+            const diffLabels = ["","简单","简单","中等","较难","困难"];
+            return (
+              <button key={level.id} onClick={() => onSelect(level)}
+                className="w-full rounded-2xl overflow-hidden transition-all duration-200 active:scale-[0.985]"
+                style={{border:`2px solid ${chapter.color}28`, background:C.cream}}>
+                <div className="flex items-stretch">
+                  <div className="w-20 h-20 flex-shrink-0 relative overflow-hidden bg-gray-100">
+                    {SceneComp && <SceneComp/>}
+                  </div>
+                  <div className="flex-1 p-3 text-left">
+                    <div className="font-bold text-sm" style={{color:C.ink}}>{level.title}</div>
+                    <div className="text-xs mt-0.5 flex items-center gap-2" style={{color:C.tile}}>
+                      <span className="px-1.5 py-0.5 rounded text-xs" style={{background:chapter.color+"18", color:chapter.color}}>{level.grid}×{level.grid}</span>
+                      {level.time && <span>⏱ {fmtTime(level.time)}</span>}
+                    </div>
+                    {record ? (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <Stars count={record.stars} size={13}/>
+                        <span className="text-xs" style={{color:C.tile}}>{record.moves}步 · {fmtTime(record.time)}</span>
+                      </div>
+                    ) : (
+                      <div className="text-xs mt-1.5" style={{color:"#ccc"}}>未挑战</div>
+                    )}
+                  </div>
+                  <div className="flex items-center pr-4">
+                    <span style={{color:chapter.color, fontSize:20}}>›</span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// 胜利弹窗
+// ═══════════════════════════════════════════════════════
+function VictoryModal({level, moves, time, onNext, onRetry, onBack}) {
+  const stars = moves <= level.stars[2] ? 3 : moves <= level.stars[1] ? 2 : 1;
+  const culture = CULTURE[level.id];
+  const SceneComp = SCENES[level.scene];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      style={{background:"rgba(0,0,0,0.58)", backdropFilter:"blur(5px)"}}>
+      <div className="w-full max-w-md max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl p-5 slide-up"
+        style={{background:C.cream}}>
+
+        <h3 className="text-center text-xl font-bold mb-3"
+          style={{color:C.ink, fontFamily:"'Noto Serif SC',serif"}}>
+          🎉 拼图完成！
+        </h3>
+
+        <div className="w-36 h-36 mx-auto rounded-xl overflow-hidden mb-4 shadow-md">
+          {SceneComp && <SceneComp/>}
+        </div>
+
+        <div className="text-center mb-4">
+          <div className="mb-2 flex justify-center">
+            <Stars count={stars} size={30} animated={true}/>
+          </div>
+          <div className="text-sm flex justify-center gap-5" style={{color:C.tile}}>
+            <span>步数 <b style={{color:C.ink}}>{moves}</b></span>
+            <span>用时 <b style={{color:C.ink}}>{fmtTime(time)}</b></span>
+          </div>
+        </div>
+
+        {culture && (
+          <div className="rounded-xl p-4 mb-4" style={{background:C.bg, border:`1px solid ${C.gold}28`}}>
+            <div className="text-base font-bold mb-1" style={{color:C.ink, fontFamily:"'Noto Serif SC',serif"}}>{culture.title}</div>
+            <div className="text-xs mb-2.5 flex gap-2" style={{color:C.tile}}>
+              <span>{culture.era}</span><span>·</span><span>{culture.loc}</span>
+            </div>
+            <p className="text-sm leading-relaxed mb-3" style={{color:C.ink+"dd"}}>{culture.desc}</p>
+            {culture.highlights && (
+              <div className="mb-3">
+                {culture.highlights.map((h,i)=>(
+                  <div key={i} className="text-xs flex items-start gap-1.5 mb-1" style={{color:C.wall}}>
+                    <span style={{color:C.gold, flexShrink:0}}>◆</span>{h}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="text-xs p-2.5 rounded-lg mb-2.5" style={{background:C.gold+"12", color:C.wall}}>
+              💡 <b>你知道吗</b>：{culture.fact}
+            </div>
+            {culture.poem && (
+              <div className="text-xs p-2.5 rounded-lg" style={{background:C.river+"10", color:C.river}}>
+                📜 {culture.poem.author}·{culture.poem.dynasty}《{culture.poem.title}》<br/>
+                <i className="mt-1 block opacity-80">"{culture.poem.text}"</i>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-2.5">
+          <button onClick={onBack}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium active:scale-95 transition-transform"
+            style={{background:"#e8e2d8", color:C.tile}}>返回</button>
+          <button onClick={onRetry}
+            className="flex-1 py-2.5 rounded-xl text-sm font-medium active:scale-95 transition-transform"
+            style={{background:C.tile+"18", color:C.ink}}>再来一次</button>
+          <button onClick={onNext}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold active:scale-95 transition-transform"
+            style={{background:`linear-gradient(135deg, ${C.wall}, ${C.red})`, color:"#fff"}}>下一关</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// 预览遮罩
+// ═══════════════════════════════════════════════════════
+function PreviewOverlay({sceneId, onClose}) {
+  const SceneComp = SCENES[sceneId];
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center"
+      style={{background:"rgba(0,0,0,0.72)"}}
+      onClick={onClose} onTouchEnd={onClose}>
+      <div className="p-2">
+        <p className="text-center text-xs mb-2 opacity-60" style={{color:"#fff"}}>参考图 · 点击关闭</p>
+        <div className="w-72 h-72 sm:w-80 sm:h-80 rounded-2xl overflow-hidden shadow-2xl border-2"
+          style={{borderColor:`${C.gold}55`}}>
+          {SceneComp && <SceneComp/>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// 游戏页面
+// ═══════════════════════════════════════════════════════
+function GamePage({level, chapter, onBack, onComplete}) {
+  const [tiles, setTiles] = useState(() => shuffleTiles(level.grid));
+  const [moves, setMoves] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [seconds, setSeconds] = useState(0);
+  const [started, setStarted] = useState(false);
+  const [done, setDone] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const timerRef = useRef(null);
+  const touchRef = useRef(null);
+  const [boardPx, setBoardPx] = useState(340);
+
+  const size = level.grid;
+  const emptyIdx = tiles.indexOf(0);
+
+  // 计时
+  useEffect(()=>{
+    if (started && !done) {
+      timerRef.current = setInterval(()=>setSeconds(s=>s+1), 1000);
+    }
+    return ()=>clearInterval(timerRef.current);
+  }, [started, done]);
+
+  // 面板尺寸响应式
+  useEffect(()=>{
+    const calc = ()=>{
+      const w = Math.min(window.innerWidth-32, 500);
+      const h = window.innerHeight - 230;
+      setBoardPx(Math.min(w, h, 500));
+    };
+    calc();
+    window.addEventListener("resize", calc);
+    return ()=>window.removeEventListener("resize", calc);
+  }, []);
+
+  const handleClick = useCallback((idx)=>{
+    if (done) return;
+    if (!isAdjacent(idx, emptyIdx, size)) return;
+    if (!started) setStarted(true);
+    setHistory(h=>[...h, tiles.slice()]);
+    setTiles(prev=>{
+      const next = [...prev];
+      [next[idx], next[emptyIdx]] = [next[emptyIdx], next[idx]];
+      if (isComplete(next)) {
+        setDone(true);
+        clearInterval(timerRef.current);
+      }
+      return next;
+    });
+    setMoves(m=>m+1);
+  }, [emptyIdx, size, started, done, tiles]);
+
+  const handleUndo = ()=>{
+    if (!history.length) return;
+    setTiles(history[history.length-1]);
+    setHistory(h=>h.slice(0,-1));
+    setMoves(m=>Math.max(0,m-1));
+  };
+
+  const handleReset = ()=>{
+    setTiles(shuffleTiles(size));
+    setMoves(0); setHistory([]); setSeconds(0);
+    setStarted(false); setDone(false);
+  };
+
+  // 键盘支持
+  useEffect(()=>{
+    const handler=(e)=>{
+      if (done) return;
+      const r=Math.floor(emptyIdx/size), c=emptyIdx%size;
+      let target=-1;
+      if (e.key==="ArrowUp" && r<size-1) target=emptyIdx+size;
+      if (e.key==="ArrowDown" && r>0) target=emptyIdx-size;
+      if (e.key==="ArrowLeft" && c<size-1) target=emptyIdx+1;
+      if (e.key==="ArrowRight" && c>0) target=emptyIdx-1;
+      if (target>=0){ e.preventDefault(); handleClick(target); }
+    };
+    window.addEventListener("keydown", handler);
+    return ()=>window.removeEventListener("keydown", handler);
+  }, [emptyIdx, size, done, handleClick]);
+
+  // 触摸滑动
+  const handleTouchStart = (e)=>{
+    touchRef.current = {x:e.touches[0].clientX, y:e.touches[0].clientY};
+  };
+  const handleTouchEnd = (e)=>{
+    if (!touchRef.current || done) return;
+    const dx = e.changedTouches[0].clientX - touchRef.current.x;
+    const dy = e.changedTouches[0].clientY - touchRef.current.y;
+    if (Math.max(Math.abs(dx),Math.abs(dy)) < 18) return;
+    const r=Math.floor(emptyIdx/size), c=emptyIdx%size;
+    let target=-1;
+    if (Math.abs(dx)>Math.abs(dy)){
+      if (dx>0 && c>0) target=emptyIdx-1;
+      if (dx<0 && c<size-1) target=emptyIdx+1;
+    } else {
+      if (dy>0 && r>0) target=emptyIdx-size;
+      if (dy<0 && r<size-1) target=emptyIdx+size;
+    }
+    if (target>=0) handleClick(target);
+    touchRef.current=null;
+  };
+
+  const movableIndices = [];
+  for (let i=0; i<tiles.length; i++)
+    if (tiles[i]!==0 && isAdjacent(i, emptyIdx, size)) movableIndices.push(i);
+
+  const currentStars = moves<=level.stars[2] ? 3 : moves<=level.stars[1] ? 2 : 1;
+
+  return (
+    <div className="min-h-screen flex flex-col" style={{background:C.bg, userSelect:"none"}}>
+      {/* 顶栏 */}
+      <div className="flex items-center px-4 py-3 gap-3"
+        style={{background:C.cream, borderBottom:`1px solid ${C.gold}18`}}>
+        <button onClick={onBack} className="text-xl active:scale-90 transition-transform p-1" style={{color:C.ink}}>←</button>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-bold truncate" style={{color:C.ink}}>{level.title}</div>
+          <div className="text-xs" style={{color:C.tile}}>{chapter.subtitle}</div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <div className="text-sm font-mono font-bold" style={{color:C.ink}}>{fmtTime(seconds)}</div>
+          <div className="text-xs" style={{color:C.tile}}>步数 {moves}</div>
+        </div>
+      </div>
+
+      {/* 星级提示 */}
+      <div className="flex justify-center py-1.5 gap-3 text-xs" style={{color:C.tile}}>
+        <span style={{color:currentStars>=1?C.gold:"#ccc"}}>⭐≤{level.stars[0]}</span>
+        <span style={{color:currentStars>=2?C.gold:"#ccc"}}>⭐⭐≤{level.stars[1]}</span>
+        <span style={{color:currentStars>=3?C.gold:"#ccc"}}>⭐⭐⭐≤{level.stars[2]}</span>
+      </div>
+
+      {/* 拼图区域 */}
+      <div className="flex-1 flex items-center justify-center px-4">
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            width:boardPx, height:boardPx,
+            position:"relative",
+            background:`${C.ink}0e`,
+            borderRadius:12,
+            touchAction:"none",
+          }}
+        >
+          {tiles.map((value,index)=>(
+            <SceneTile
+              key={value===0 ? "empty" : value}
+              value={value}
+              index={index}
+              size={size}
+              boardPx={boardPx}
+              isMovable={movableIndices.includes(index)}
+              onClick={handleClick}
+              sceneId={level.scene}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* 底部操作栏 */}
+      <div className="flex justify-center gap-3 py-3 px-4" style={{paddingBottom:"max(12px,env(safe-area-inset-bottom))"}}>
+        {[
+          {label:"预览", icon:"👁", action:()=>setShowPreview(true)},
+          {label:"撤销", icon:"↩", action:handleUndo, disabled:history.length===0},
+          {label:"重置", icon:"🔄", action:handleReset},
+        ].map(btn=>(
+          <button key={btn.label} onClick={btn.action} disabled={btn.disabled}
+            className="flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl text-xs active:scale-90 transition-all"
+            style={{
+              background:C.cream, color:btn.disabled?"#ccc":C.ink,
+              border:`1px solid ${C.gold}18`,
+              opacity:btn.disabled?0.45:1,
+              minWidth:64,
+            }}>
+            <span className="text-lg leading-tight">{btn.icon}</span>
+            {btn.label}
+          </button>
+        ))}
+      </div>
+
+      {showPreview && <PreviewOverlay sceneId={level.scene} onClose={()=>setShowPreview(false)}/>}
+
+      {done && (
+        <VictoryModal
+          level={level} moves={moves} time={seconds}
+          onRetry={handleReset}
+          onBack={onBack}
+          onNext={()=>{
+            onComplete(level.id, moves, seconds);
+            const allLevels = CHAPTERS.flatMap(c=>c.levels);
+            const idx = allLevels.findIndex(l=>l.id===level.id);
+            if (idx < allLevels.length-1) {
+              const next = allLevels[idx+1];
+              // 找到下一关所属章节
+              const nextChapter = CHAPTERS.find(c=>c.levels.some(l=>l.id===next.id));
+              if (nextChapter) {
+                onBack(nextChapter, next);
+                return;
+              }
+            }
+            onBack();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// 主应用
+// ═══════════════════════════════════════════════════════
+function App() {
+  const [page, setPage] = useState("menu");
+  const [chapter, setChapter] = useState(null);
+  const [level, setLevel] = useState(null);
+  const [progress, setProgress] = useState(()=>loadProgress());
+  const [toast, setToast] = useState({msg:"", visible:false});
+  const [animKey, setAnimKey] = useState(0);
+
+  // 保存进度到 localStorage
+  useEffect(()=>saveProgress(progress), [progress]);
+
+  const navigate = (target, data1, data2)=>{
+    setAnimKey(k=>k+1);
+    if (target==="menu") setPage("menu");
+    else if (target==="chapters") setPage("chapters");
+    else if (target==="levels") { setChapter(data1); setPage("levels"); }
+    else if (target==="game") { setLevel(data1); setPage("game"); }
+  };
+
+  const handleComplete = (levelId, moves, time)=>{
+    const lv = CHAPTERS.flatMap(c=>c.levels).find(l=>l.id===levelId);
+    if (!lv) return;
+    const stars = moves<=lv.stars[2] ? 3 : moves<=lv.stars[1] ? 2 : 1;
+    setProgress(prev=>{
+      const existing = prev[levelId];
+      if (!existing || stars>existing.stars || (stars===existing.stars && moves<existing.moves)) {
+        return {...prev, [levelId]:{stars, moves, time}};
+      }
+      return prev;
+    });
+  };
+
+  const showToast = (msg)=>{
+    setToast({msg, visible:true});
+    setTimeout(()=>setToast({msg:"", visible:false}), 2500);
+  };
+
+  const handleShare = async ()=>{
+    const shareData = {
+      title:"赣州风物志 · 滑块拼图",
+      text:"一款赣州人文地理主题拼图游戏，15关带你品味赣南千年文化！",
+      url: window.location.href,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch {}
+    } else {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        showToast("链接已复制到剪贴板！发给朋友一起玩 🎉");
+      } catch {
+        showToast("复制链接：" + window.location.href);
+      }
+    }
+  };
+
+  return (
+    <div key={animKey} className="fade-in">
+      {page==="menu" && (
+        <MainMenu onStart={()=>navigate("chapters")} onShare={handleShare}/>
+      )}
+      {page==="chapters" && (
+        <ChapterSelect
+          progress={progress}
+          onSelect={(ch)=>navigate("levels", ch)}
+          onBack={()=>navigate("menu")}
+        />
+      )}
+      {page==="levels" && chapter && (
+        <LevelSelect
+          chapter={chapter}
+          progress={progress}
+          onSelect={(lv)=>navigate("game", lv)}
+          onBack={()=>navigate("chapters")}
+        />
+      )}
+      {page==="game" && level && chapter && (
+        <GamePage
+          level={level}
+          chapter={chapter}
+          onBack={(nextCh, nextLv)=>{
+            if (nextCh && nextLv) {
+              setChapter(nextCh);
+              setLevel(nextLv);
+            } else {
+              navigate("levels", chapter);
+            }
+          }}
+          onComplete={handleComplete}
+        />
+      )}
+      <Toast msg={toast.msg} visible={toast.visible}/>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App/>);
+</script>
+</body>
+</html>
